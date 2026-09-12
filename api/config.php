@@ -55,3 +55,46 @@ function db(): mysqli
 
     return $conn;
 }
+
+function payload(): array
+{
+    $raw = file_get_contents('php://input');
+
+    if ($raw === false || trim($raw) === '') {
+        return $_POST;
+    }
+
+    $decoded = json_decode($raw, true);
+
+    if (!is_array($decoded)) {
+        respond(false, 'Request body is not valid JSON.', null, 400);
+    }
+
+    return $decoded;
+}
+
+function requireMethod(string $method): void
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== $method) {
+        respond(false, 'Method not allowed. This endpoint expects ' . $method . '.', null, 405);
+    }
+}
+
+function label(string $key): string
+{
+    return ucfirst(str_replace('_', ' ', $key));
+}
+
+function textField(array $src, string $key, int $max, bool $required = true): string
+{
+    $value = trim((string)($src[$key] ?? ''));
+
+    if ($required && $value === '') {
+        respond(false, label($key) . ' is required.', null, 422);
+    }
+
+    if (mb_strlen($value) > $max) {
+        respond(false, label($key) . ' must not exceed ' . $max . ' characters.', null, 422);
+    }
+
+    return $value;
