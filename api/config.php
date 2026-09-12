@@ -98,3 +98,36 @@ function textField(array $src, string $key, int $max, bool $required = true): st
     }
 
     return $value;
+}
+
+function moneyField(array $src, string $key): float
+{
+    $raw = $src[$key] ?? 0;
+
+    if (!is_numeric($raw)) {
+        respond(false, label($key) . ' must be a number.', null, 422);
+    }
+
+    $value = round((float)$raw, 2);
+
+    if ($value < 0) {
+        respond(false, label($key) . ' cannot be negative.', null, 422);
+    }
+
+    if ($value > 99999.99) {
+        respond(false, label($key) . ' is out of range.', null, 422);
+    }
+
+    return $value;
+}
+
+function enumField(array $src, string $key, array $allowed, string $fallback): string
+{
+    $value = strtolower(trim((string)($src[$key] ?? $fallback)));
+
+    if (!in_array($value, $allowed, true)) {
+        respond(false, label($key) . ' must be one of: ' . implode(', ', $allowed) . '.', null, 422);
+    }
+
+    return $value;
+}
