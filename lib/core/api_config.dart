@@ -69,3 +69,5 @@ class VehicleTypes {
     uvExpress,
   ];
 }
+
+
