@@ -35,3 +35,23 @@ function respond(bool $success, string $message, mixed $data = null, int $code =
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
+
+function db(): mysqli
+{
+    static $conn = null;
+
+    if ($conn instanceof mysqli) {
+        return $conn;
+    }
+
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+    try {
+        $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+        $conn->set_charset('utf8mb4');
+    } catch (Throwable $e) {
+        respond(false, 'Database connection failed. Make sure MySQL is running.', null, 500);
+    }
+
+    return $conn;
+}
