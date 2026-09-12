@@ -131,3 +131,64 @@ function enumField(array $src, string $key, array $allowed, string $fallback): s
 
     return $value;
 }
+
+function boolField(array $src, string $key, bool $fallback = true): int
+{
+    if (!array_key_exists($key, $src)) {
+        return $fallback ? 1 : 0;
+    }
+
+    $value = $src[$key];
+
+    if (is_bool($value)) {
+        return $value ? 1 : 0;
+    }
+
+    return in_array((string)$value, ['1', 'true', 'yes', 'on'], true) ? 1 : 0;
+}
+
+function idField(array $src, string $key = 'id'): int
+{
+    $raw = $src[$key] ?? null;
+
+    if ($raw === null || !is_numeric($raw) || (int)$raw <= 0) {
+        respond(false, 'A valid record id is required.', null, 422);
+    }
+
+    return (int)$raw;
+}
+
+/** Normalises a database row into the shape the Flutter client expects. */
+function mapRoute(array $row): array
+{
+    return [
+        'id'              => (int)$row['id'],
+        'route_name'      => $row['route_name'],
+        'origin'          => $row['origin'],
+        'destination'     => $row['destination'],
+        'vehicle_type'    => $row['vehicle_type'],
+        'regular_fare'    => (float)$row['regular_fare'],
+        'discounted_fare' => (float)$row['discounted_fare'],
+        'operating_hours' => $row['operating_hours'],
+        'notes'           => $row['notes'] ?? '',
+        'is_active'       => ((int)$row['is_active']) === 1,
+        'created_at'      => $row['created_at'],
+        'updated_at'      => $row['updated_at'],
+    ];
+}
+
+function findRouteOrFail(int $id): array
+{
+    $stmt = db()->prepare('SELECT * FROM routes WHERE id = ? LIMIT 1');
+    $stmt->bind_param('i', $id);
+    $stmt->execute();
+
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if ($row === null) {
+        respond(false, 'Route not found. It may have already been deleted.', null, 404);
+    }
+
+    return $row;
+}
