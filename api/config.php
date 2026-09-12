@@ -23,3 +23,15 @@ define('DB_NAME', 'pasahero_db');
 
 define('API_NAME', 'pasahero-api');
 define('API_VERSION', '1.0.0');
+
+/** Sends a uniform JSON envelope and terminates the request. */
+function respond(bool $success, string $message, mixed $data = null, int $code = 200): void
+{
+    http_response_code($code);
+    echo json_encode([
+        'success' => $success,
+        'message' => $message,
+        'data'    => $data,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
