@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../core/api_result.dart';
+import '../core/route_validator.dart';
 import '../models/jeep_route.dart';
 import '../services/route_service.dart';
 import '../theme/app_theme.dart';
@@ -33,6 +34,12 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
 
   late String _vehicleType;
   late bool _isActive;
+
+  /// True while a request is in flight. Blocks a second submission.
+  bool _isSaving = false;
+
+  /// Last validation or API problem, shown under the form.
+  String? _errorMessage;
 
   bool get _isEditing => widget.existing != null;
 
@@ -73,6 +80,13 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
     super.dispose();
   }
 
+  /// Clears the inline error as soon as the user starts fixing things.
+  void _clearError(String _) {
+    if (_errorMessage != null) {
+      setState(() => _errorMessage = null);
+    }
+  }
+
   /// Collects the current field values into a route object.
   JeepRoute _buildPayload() {
     return JeepRoute(
@@ -81,37 +95,78 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
       origin: _originController.text.trim(),
       destination: _destinationController.text.trim(),
       vehicleType: _vehicleType,
-      regularFare: double.tryParse(_regularFareController.text.trim()) ?? 0,
+      regularFare:
+      RouteValidator.parseFare(_regularFareController.text) ?? 0,
       discountedFare:
-      double.tryParse(_discountedFareController.text.trim()) ?? 0,
+      RouteValidator.parseFare(_discountedFareController.text) ?? 0,
       operatingHours: _hoursController.text.trim(),
       notes: _notesController.text.trim(),
       isActive: _isActive,
     );
   }
 
-  /// CREATE or UPDATE, depending on the mode.
+  /// Validates, then performs CREATE or UPDATE depending on the mode.
   Future<void> _handleSave() async {
+    if (_isSaving) {
+      return;
+    }
+
     FocusScope.of(context).unfocus();
 
-    final JeepRoute payload = _buildPayload();
+    // 1. Local checks first, so a typo never leaves the phone.
+    final String? validationError = RouteValidator.validate(
+      routeName: _nameController.text,
+      origin: _originController.text,
+      destination: _destinationController.text,
+      regularFareText: _regularFareController.text,
+      discountedFareText: _discountedFareController.text,
+    );
 
+    if (validationError != null) {
+      setState(() => _errorMessage = validationError);
+      return;
+    }
+
+    setState(() {
+      _errorMessage = null;
+      _isSaving = true;
+    });
+
+    // 2. Send it.
     try {
-      if (_isEditing) {
-        await RouteService.instance.updateRoute(payload);
-      } else {
-        await RouteService.instance.createRoute(payload);
-      }
+      final JeepRoute payload = _buildPayload();
+
+      final JeepRoute saved = _isEditing
+          ? await RouteService.instance.updateRoute(payload)
+          : await RouteService.instance.createRoute(payload);
 
       if (!mounted) {
         return;
       }
 
+      setState(() => _isSaving = false);
+
+      await AppDialogs.showSuccess(
+        context,
+        title: _isEditing ? 'Route Updated' : 'Route Created',
+        message: '"${saved.routeName}" has been saved successfully.',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      // `true` tells the home screen to reload the list.
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       if (!mounted) {
         return;
       }
+
+      setState(() {
+        _isSaving = false;
+        _errorMessage = e.message;
+      });
 
       await AppDialogs.showError(
         context,
@@ -134,7 +189,11 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
         actions: <Widget>[
           GlassIconButton(
             icon: const Icon(CupertinoIcons.xmark),
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () {
+              if (!_isSaving) {
+                Navigator.of(context).pop(false);
+              }
+            },
           ),
         ],
       ),
@@ -150,22 +209,29 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
                 controller: _nameController,
                 placeholder: 'Angeles - Dau Terminal',
                 icon: CupertinoIcons.map,
+                enabled: !_isSaving,
+                onChanged: _clearError,
               ),
               FormFieldGroup(
                 label: 'Origin',
                 controller: _originController,
                 placeholder: 'Nepo Mart, Angeles City',
                 icon: CupertinoIcons.location,
+                enabled: !_isSaving,
+                onChanged: _clearError,
               ),
               FormFieldGroup(
                 label: 'Destination',
                 controller: _destinationController,
                 placeholder: 'Dau Bus Terminal',
                 icon: CupertinoIcons.location_solid,
+                enabled: !_isSaving,
+                onChanged: _clearError,
               ),
 
               VehicleTypeSelector(
                 selected: _vehicleType,
+                enabled: !_isSaving,
                 onChanged: (String type) =>
                     setState(() => _vehicleType = type),
               ),
@@ -179,9 +245,11 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
                       controller: _regularFareController,
                       placeholder: '15.00',
                       icon: CupertinoIcons.money_dollar,
+                      enabled: !_isSaving,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      onChanged: _clearError,
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -191,9 +259,11 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
                       controller: _discountedFareController,
                       placeholder: '12.00',
                       icon: CupertinoIcons.tag,
+                      enabled: !_isSaving,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      onChanged: _clearError,
                     ),
                   ),
                 ],
@@ -204,6 +274,8 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
                 controller: _hoursController,
                 placeholder: '4:30 AM - 10:00 PM',
                 icon: CupertinoIcons.clock,
+                enabled: !_isSaving,
+                onChanged: _clearError,
               ),
               FormFieldGroup(
                 label: 'Notes',
@@ -211,24 +283,70 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
                 placeholder: 'Optional remarks about this route',
                 icon: CupertinoIcons.doc_text,
                 maxLines: 3,
+                enabled: !_isSaving,
+                onChanged: _clearError,
               ),
 
               ActiveStatusSelector(
                 isActive: _isActive,
+                enabled: !_isSaving,
                 onChanged: (bool value) => setState(() => _isActive = value),
               ),
 
-              const SizedBox(height: 8),
+              if (_errorMessage != null) ...<Widget>[
+                _FormError(message: _errorMessage!),
+                const SizedBox(height: 18),
+              ],
+
+              const SizedBox(height: 4),
               Center(
                 child: GlassButton(
-                  icon: const Icon(CupertinoIcons.checkmark_alt),
-                  label: _isEditing ? 'Save Changes' : 'Create Route',
+                  icon: Icon(
+                    _isSaving
+                        ? CupertinoIcons.arrow_2_circlepath
+                        : CupertinoIcons.checkmark_alt,
+                  ),
+                  label: _isSaving
+                      ? 'Saving...'
+                      : (_isEditing ? 'Save Changes' : 'Create Route'),
                   onTap: _handleSave,
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Inline banner showing why the form could not be saved.
+class _FormError extends StatelessWidget {
+  const _FormError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      quality: GlassQuality.minimal,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
+              CupertinoIcons.exclamationmark_triangle_fill,
+              size: 16,
+              color: AppColors.danger,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(message, style: AppTextStyles.bodySmall),
+          ),
+        ],
       ),
     );
   }
