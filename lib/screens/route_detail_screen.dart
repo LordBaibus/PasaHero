@@ -9,6 +9,10 @@ import '../widgets/app_dialogs.dart';
 import '../widgets/detail_row.dart';
 import 'route_form_screen.dart';
 
+/// Full view of a single route, and the home of the DELETE operation.
+///
+/// Pops with `true` when the record was changed or removed, so the home screen
+/// reloads its list.
 class RouteDetailScreen extends StatefulWidget {
   const RouteDetailScreen({super.key, required this.route});
 
@@ -21,10 +25,13 @@ class RouteDetailScreen extends StatefulWidget {
 class _RouteDetailScreenState extends State<RouteDetailScreen> {
   late JeepRoute _route = widget.route;
 
+  /// Tracks whether anything changed, so we know what to pop with.
   bool _hasChanges = false;
 
+  /// True while the delete request is in flight.
   bool _isDeleting = false;
 
+  /// Opens Member D's form in edit mode, then refreshes from the server.
   Future<void> _handleEdit() async {
     if (_isDeleting) {
       return;
@@ -57,6 +64,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     }
   }
 
+  /// DELETE — asks first, then removes the record from the database.
   Future<void> _handleDelete() async {
     if (_isDeleting) {
       return;
@@ -134,10 +142,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
           ),
         ],
       ),
+      // SafeArea handles the status bar and the gesture bar. The 74px of top
+      // padding clears the app bar, which GlassScaffold floats OVER the body.
       body: SafeArea(
-        top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+          padding: const EdgeInsets.fromLTRB(20, 74, 20, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
@@ -161,8 +170,10 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                       label: 'Destination',
                       value: _route.destination,
                     ),
+                    // Peso character instead of CupertinoIcons.money_dollar,
+                    // which is a dollar sign.
                     DetailRow(
-                      icon: CupertinoIcons.money_dollar,
+                      prefix: const PesoSign(),
                       label: 'Regular Fare',
                       value: _route.regularFareLabel,
                     ),
@@ -188,25 +199,30 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 ),
               ),
 
-              const SizedBox(height: 24),
-              Center(
-                child: GlassButton(
-                  icon: const Icon(CupertinoIcons.pencil),
-                  label: 'Edit Route',
-                  onTap: _handleEdit,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: GlassButton(
-                  icon: Icon(
-                    _isDeleting
+              const SizedBox(height: 26),
+
+              // Edit and Delete side by side instead of stacked.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  _ActionButton(
+                    icon: CupertinoIcons.pencil,
+                    label: 'Edit',
+                    width: 128,
+                    color: AppColors.accent,
+                    onTap: _handleEdit,
+                  ),
+                  const SizedBox(width: 14),
+                  _ActionButton(
+                    icon: _isDeleting
                         ? CupertinoIcons.arrow_2_circlepath
                         : CupertinoIcons.trash,
+                    label: _isDeleting ? 'Deleting' : 'Delete',
+                    width: 138,
+                    color: AppColors.danger,
+                    onTap: _handleDelete,
                   ),
-                  label: _isDeleting ? 'Deleting...' : 'Delete Route',
-                  onTap: _handleDelete,
-                ),
+                ],
               ),
             ],
           ),
@@ -216,6 +232,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   }
 }
 
+/// Route name and status at the top of the screen.
 class _HeroPanel extends StatelessWidget {
   const _HeroPanel({required this.route});
 
@@ -231,10 +248,13 @@ class _HeroPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(route.routeName, style: AppTextStyles.display.copyWith(
-            fontSize: 23,
-            height: 1.25,
-          )),
+          Text(
+            route.routeName,
+            style: AppTextStyles.display.copyWith(
+              fontSize: 23,
+              height: 1.25,
+            ),
+          ),
           const SizedBox(height: 12),
           Row(
             children: <Widget>[
@@ -252,6 +272,57 @@ class _HeroPanel extends StatelessWidget {
                 style: AppTextStyles.caption,
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Action button with a visible icon and label.
+///
+/// GlassButton.custom is required here. The default GlassButton constructor
+/// only paints an icon — its `label` argument is a semantic label for screen
+/// readers and never appears on screen.
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.width,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+
+  /// GlassButton.custom does not measure its child, so the width is explicit.
+  final double width;
+
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassButton.custom(
+      onTap: onTap,
+      width: width,
+      height: 50,
+      shape: const LiquidRoundedRectangle(borderRadius: 25),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Icon(icon, size: 17, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
           ),
         ],
       ),

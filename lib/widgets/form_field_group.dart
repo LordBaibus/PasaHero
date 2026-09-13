@@ -3,7 +3,6 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../theme/app_theme.dart';
 
-/// A caption above a liquid glass text field, used throughout the route form.
 class FormFieldGroup extends StatelessWidget {
   const FormFieldGroup({
     super.key,
@@ -11,25 +10,37 @@ class FormFieldGroup extends StatelessWidget {
     required this.controller,
     this.placeholder = '',
     this.icon,
+    this.prefix,
     this.keyboardType,
     this.maxLines = 1,
     this.enabled = true,
     this.onChanged,
+    this.helperText,
   });
 
-  /// Small uppercase caption shown above the field.
   final String label;
 
   final TextEditingController controller;
   final String placeholder;
+
   final IconData? icon;
+
+  final Widget? prefix;
+
   final TextInputType? keyboardType;
   final int maxLines;
   final bool enabled;
   final ValueChanged<String>? onChanged;
 
+  final String? helperText;
+
   @override
   Widget build(BuildContext context) {
+    final Widget? resolvedPrefix = prefix ??
+        (icon == null
+            ? null
+            : Icon(icon, size: 18, color: AppColors.textMuted));
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Column(
@@ -51,11 +62,14 @@ class FormFieldGroup extends StatelessWidget {
             shape: const LiquidRoundedRectangle(borderRadius: 14),
             textStyle: AppTextStyles.body,
             placeholderStyle: AppTextStyles.placeholder,
-            prefixIcon: icon == null
-                ? null
-                : Icon(icon, size: 18, color: AppColors.textMuted),
+            prefixIcon: resolvedPrefix,
             onChanged: onChanged,
           ),
+          if (helperText != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, top: 7),
+              child: Text(helperText!, style: AppTextStyles.caption),
+            ),
         ],
       ),
     );

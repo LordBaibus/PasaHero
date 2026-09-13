@@ -10,6 +10,11 @@ import '../widgets/app_dialogs.dart';
 import '../widgets/form_field_group.dart';
 import '../widgets/vehicle_type_selector.dart';
 
+/// Discounted fares are a fixed 80% of the regular fare.
+///
+/// Change this single value if the student and senior discount ever changes.
+const double kDiscountRate = 0.80;
+
 /// Handles both the CREATE and the UPDATE operation.
 ///
 /// Pass [existing] to edit a route; leave it null to add a new one. Pops with
@@ -37,6 +42,9 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
 
   /// True while a request is in flight. Blocks a second submission.
   bool _isSaving = false;
+
+  /// Guard so the two fare fields do not keep rewriting each other.
+  bool _syncingFares = false;
 
   /// Last validation or API problem, shown under the form.
   String? _errorMessage;
@@ -85,6 +93,56 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
     if (_errorMessage != null) {
       setState(() => _errorMessage = null);
     }
+  }
+
+  /// Regular fare was typed, so recalculate the discounted fare.
+  void _onRegularFareChanged(String value) {
+    _clearError(value);
+
+    if (_syncingFares) {
+      return;
+    }
+
+    _syncingFares = true;
+
+    final double? regular = RouteValidator.parseFare(value);
+
+    if (regular == null) {
+      // Emptying the regular fare empties the discounted one too, so the form
+      // never shows a leftover amount that no longer means anything.
+      if (value.trim().isEmpty) {
+        _discountedFareController.text = '';
+      }
+    } else {
+      _discountedFareController.text =
+          (regular * kDiscountRate).toStringAsFixed(2);
+    }
+
+    _syncingFares = false;
+  }
+
+  /// Discounted fare was typed, so work backwards to the regular fare.
+  void _onDiscountedFareChanged(String value) {
+    _clearError(value);
+
+    if (_syncingFares) {
+      return;
+    }
+
+    _syncingFares = true;
+
+    final double? discounted = RouteValidator.parseFare(value);
+
+    if (discounted == null) {
+      if (value.trim().isEmpty) {
+        _regularFareController.text = '';
+      }
+    } else {
+      _regularFareController.text =
+          (discounted / kDiscountRate).toStringAsFixed(2);
+    }
+
+    _syncingFares = false;
   }
 
   /// Collects the current field values into a route object.
@@ -197,10 +255,11 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
           ),
         ],
       ),
+      // SafeArea handles the status bar and the gesture bar. The 74px of top
+      // padding clears the app bar, which GlassScaffold floats OVER the body.
       body: SafeArea(
-        top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+          padding: const EdgeInsets.fromLTRB(20, 74, 20, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
@@ -244,12 +303,12 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
                       label: 'Regular Fare',
                       controller: _regularFareController,
                       placeholder: '15.00',
-                      icon: CupertinoIcons.money_dollar,
+                      prefix: const _PesoSign(),
                       enabled: !_isSaving,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      onChanged: _clearError,
+                      onChanged: _onRegularFareChanged,
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -258,15 +317,24 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
                       label: 'Discounted Fare',
                       controller: _discountedFareController,
                       placeholder: '12.00',
-                      icon: CupertinoIcons.tag,
+                      prefix: const _PesoSign(),
                       enabled: !_isSaving,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      onChanged: _clearError,
+                      onChanged: _onDiscountedFareChanged,
                     ),
                   ),
                 ],
+              ),
+
+              const Padding(
+                padding: EdgeInsets.only(left: 6, bottom: 20),
+                child: Text(
+                  'The discounted fare is 80% of the regular fare. Editing '
+                      'either one updates the other.',
+                  style: AppTextStyles.caption,
+                ),
               ),
 
               FormFieldGroup(
@@ -300,21 +368,88 @@ class _RouteFormScreenState extends State<RouteFormScreen> {
 
               const SizedBox(height: 4),
               Center(
-                child: GlassButton(
-                  icon: Icon(
-                    _isSaving
-                        ? CupertinoIcons.arrow_2_circlepath
-                        : CupertinoIcons.checkmark_alt,
-                  ),
-                  label: _isSaving
-                      ? 'Saving...'
-                      : (_isEditing ? 'Save Changes' : 'Create Route'),
+                child: _SaveButton(
+                  isSaving: _isSaving,
+                  isEditing: _isEditing,
                   onTap: _handleSave,
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Peso character used in place of an icon on the fare fields.
+///
+/// Neither CupertinoIcons nor Material's icon font has a peso glyph, so this
+/// draws the character itself.
+class _PesoSign extends StatelessWidget {
+  const _PesoSign();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(left: 2),
+      child: Text(
+        '\u20B1',
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+/// Save button with a visible label.
+class _SaveButton extends StatelessWidget {
+  const _SaveButton({
+    required this.isSaving,
+    required this.isEditing,
+    required this.onTap,
+  });
+
+  final bool isSaving;
+  final bool isEditing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final String label = isSaving
+        ? 'Saving'
+        : (isEditing ? 'Save Changes' : 'Create Route');
+
+    return GlassButton.custom(
+      onTap: onTap,
+      width: 200,
+      height: 54,
+      shape: const LiquidRoundedRectangle(borderRadius: 27),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Icon(
+            isSaving
+                ? CupertinoIcons.arrow_2_circlepath
+                : CupertinoIcons.checkmark_alt,
+            size: 18,
+            color: AppColors.accent,
+          ),
+          const SizedBox(width: 9),
+          Text(
+            label,
+            maxLines: 1,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.accent,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -6,13 +6,24 @@ import '../theme/app_theme.dart';
 class DetailRow extends StatelessWidget {
   const DetailRow({
     super.key,
-    required this.icon,
+    this.icon,
+    this.prefix,
     required this.label,
     required this.value,
     this.isLast = false,
-  });
+  }) : assert(
+  icon != null || prefix != null,
+  'DetailRow needs either an icon or a prefix widget.',
+  );
 
-  final IconData icon;
+  /// Simple icon shown at the left of the row.
+  final IconData? icon;
+
+  /// Custom widget shown at the left of the row.
+  ///
+  /// Takes priority over [icon]. Used for the peso sign on the fare row, since
+  /// neither icon font has a peso glyph.
+  final Widget? prefix;
 
   /// Small uppercase caption, e.g. "ORIGIN".
   final String label;
@@ -26,6 +37,16 @@ class DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A fixed box keeps every row's text aligned, whether the leading widget
+    // is an icon or a text character.
+    final Widget leading = SizedBox(
+      width: 18,
+      child: Center(
+        child: prefix ??
+            Icon(icon, size: 17, color: AppColors.textMuted),
+      ),
+    );
+
     return Padding(
       padding: EdgeInsets.only(bottom: isLast ? 0 : 20),
       child: Row(
@@ -33,9 +54,9 @@ class DetailRow extends StatelessWidget {
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Icon(icon, size: 17, color: AppColors.textMuted),
+            child: leading,
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -47,6 +68,26 @@ class DetailRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Peso character used in place of an icon.
+///
+/// Neither CupertinoIcons nor Material's icon font has a peso glyph, so this
+/// draws the character itself.
+class PesoSign extends StatelessWidget {
+  const PesoSign({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      '\u20B1',
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textMuted,
       ),
     );
   }

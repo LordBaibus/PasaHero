@@ -1,20 +1,21 @@
 import 'package:flutter/cupertino.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
-import '../core/api_config.dart';
 import '../core/api_result.dart';
 import '../core/server_session.dart';
 import '../models/jeep_route.dart';
 import '../services/route_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/route_card.dart';
+import '../widgets/vehicle_filter_bar.dart';
+import '../widgets/home_bottom_bar.dart';
 import 'route_detail_screen.dart';
 import 'route_form_screen.dart';
 
 /// Main interface, reachable only after the server address has been verified.
 ///
-/// Demonstrates the READ operation and is the launch point for Create (the
-/// add button), Update and Delete (through the detail screen).
+/// Demonstrates the READ operation and is the launch point for Create, Update
+/// and Delete.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -23,7 +24,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController searchController = TextEditingController();
 
   List<JeepRoute> _routes = const <JeepRoute>[];
   String? _vehicleFilter;
@@ -33,17 +34,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadRoutes();
+    loadRoutes();
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    searchController.dispose();
     super.dispose();
   }
 
   /// READ — pulls the current list from routes_read.php.
-  Future<void> _loadRoutes() async {
+  Future<void> loadRoutes() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -51,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final List<JeepRoute> routes = await RouteService.instance.fetchRoutes(
-        search: _searchController.text,
+        search: searchController.text,
         vehicleType: _vehicleFilter,
       );
 
@@ -76,13 +77,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Opens the form for Create (no argument) or Update (with a route).
-  Future<void> _openForm({JeepRoute? existing}) async {
+  Future<void> openForm({JeepRoute? existing}) async {
     final bool? changed = await Navigator.of(context).push<bool>(
       appPageRoute<bool>(RouteFormScreen(existing: existing)),
     );
 
     if (changed == true) {
-      await _loadRoutes();
+      await loadRoutes();
     }
   }
 
@@ -93,13 +94,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (changed == true) {
-      await _loadRoutes();
+      await loadRoutes();
     }
   }
 
   void _applyFilter(String? vehicleType) {
     setState(() => _vehicleFilter = vehicleType);
-    _loadRoutes();
+    loadRoutes();
   }
 
   @override
@@ -108,58 +109,32 @@ class _HomeScreenState extends State<HomeScreen> {
       background: const AppBackground(),
       statusBarStyle: GlassStatusBarStyle.light,
       appBar: GlassAppBar(
-        title: const Text('PasaHero', style: AppTextStyles.title),
+        title: const _ConnectionTitle(),
         actions: <Widget>[
           GlassIconButton(
             icon: const Icon(CupertinoIcons.arrow_clockwise),
-            onPressed: _loadRoutes,
+            onPressed: loadRoutes,
           ),
         ],
       ),
+      // Everything sits inside a SafeArea so nothing collides with the status
+      // bar, the notch, or the gesture bar at the bottom.
       body: SafeArea(
-        top: false,
         child: Column(
           children: <Widget>[
-            const SizedBox(height: 12),
-            const _ConnectionBanner(),
-            const SizedBox(height: 14),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: GlassTextField.search(
-                controller: _searchController,
-                placeholder: 'Search route, origin or destination',
-                useOwnLayer: true,
-                settings: AppGlass.input,
-                textStyle: AppTextStyles.body,
-                placeholderStyle: AppTextStyles.placeholder,
-                prefixIcon: const Icon(
-                  CupertinoIcons.search,
-                  size: 18,
-                  color: AppColors.textMuted,
-                ),
-                onSubmitted: (_) => _loadRoutes(),
-              ),
-            ),
-
-            const SizedBox(height: 14),
-            _FilterRow(
+            // SafeArea clears the status bar, but GlassScaffold floats the app
+            // bar OVER the body, so this spacer clears the bar itself.
+            const SizedBox(height: 58),
+            VehicleFilterBar(
               selected: _vehicleFilter,
               onSelected: _applyFilter,
             ),
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 14),
             Expanded(child: _buildBody()),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
-              child: Center(
-                child: GlassButton(
-                  icon: const Icon(CupertinoIcons.add),
-                  label: 'Add New Route',
-                  onTap: () => _openForm(),
-                ),
-              ),
+            HomeBottomBar(
+              controller: searchController,
+              onSearch: loadRoutes,
+              onAdd: () => openForm(),
             ),
           ],
         ),
@@ -189,8 +164,8 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 18),
               GlassButton(
                 icon: const Icon(CupertinoIcons.refresh),
-                label: 'Try Again',
-                onTap: _loadRoutes,
+                label: 'Try again',
+                onTap: loadRoutes,
               ),
             ],
           ),
@@ -203,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 44),
           child: Text(
-            'No routes found.\nTap "Add New Route" to create the first record.',
+            'No routes found.\nTap the plus button to create the first record.',
             textAlign: TextAlign.center,
             style: AppTextStyles.caption,
           ),
@@ -212,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       itemCount: _routes.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (BuildContext context, int index) {
@@ -226,100 +201,38 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Shows which server the app is currently talking to.
-class _ConnectionBanner extends StatelessWidget {
-  const _ConnectionBanner();
+/// Replaces the old "PasaHero" title.
+///
+/// Shows a green dot and the host the app is currently talking to, which is
+/// far more useful on screen during the demonstration than the app name.
+class _ConnectionTitle extends StatelessWidget {
+  const _ConnectionTitle();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: ValueListenableBuilder<String>(
-        valueListenable: ServerSession.instance.hostLabel,
-        builder: (BuildContext context, String host, Widget? child) {
-          return Row(
-            children: <Widget>[
-              Container(
-                width: 7,
-                height: 7,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.success,
-                ),
+    return ValueListenableBuilder<String>(
+      valueListenable: ServerSession.instance.hostLabel,
+      builder: (BuildContext context, String host, Widget? child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.success,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  host.isEmpty ? 'Connected' : 'Connected to $host',
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.caption,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Horizontal row of vehicle-type filters.
-class _FilterRow extends StatelessWidget {
-  const _FilterRow({required this.selected, required this.onSelected});
-
-  final String? selected;
-  final ValueChanged<String?> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 46,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        children: <Widget>[
-          _FilterButton(
-            label: 'All',
-            isSelected: selected == null,
-            onTap: () => onSelected(null),
-          ),
-          for (final String type in VehicleTypes.all) ...<Widget>[
-            const SizedBox(width: 9),
-            _FilterButton(
-              label: JeepRoute.vehicleLabel(type),
-              isSelected: selected == type,
-              onTap: () => onSelected(type),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              host.isEmpty ? 'Connected' : host,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption,
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-/// One filter option. Selection is shown by the icon, not by colour alone.
-class _FilterButton extends StatelessWidget {
-  const _FilterButton({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassButton(
-      icon: Icon(
-        isSelected
-            ? CupertinoIcons.checkmark_circle_fill
-            : CupertinoIcons.circle,
-        size: 15,
-      ),
-      label: label,
-      onTap: onTap,
+        );
+      },
     );
   }
 }
