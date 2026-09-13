@@ -5,6 +5,7 @@ import '../core/api_result.dart';
 import '../models/jeep_route.dart';
 import '../services/route_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_dialogs.dart';
 import '../widgets/detail_row.dart';
 import 'route_form_screen.dart';
 
@@ -22,7 +23,13 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
 
   bool _hasChanges = false;
 
+  bool _isDeleting = false;
+
   Future<void> _handleEdit() async {
+    if (_isDeleting) {
+      return;
+    }
+
     final bool? changed = await Navigator.of(context).push<bool>(
       appPageRoute<bool>(RouteFormScreen(existing: _route)),
     );
@@ -44,15 +51,74 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
 
       setState(() => _route = refreshed);
     } on ApiException {
-      // The record is gone or unreachable — just go back and let the home
-      // screen resync the list.
       if (mounted) {
         Navigator.of(context).pop(true);
       }
     }
   }
 
-  void _close() => Navigator.of(context).pop(_hasChanges);
+  Future<void> _handleDelete() async {
+    if (_isDeleting) {
+      return;
+    }
+
+    final bool confirmed = await AppDialogs.showConfirm(
+      context,
+      title: 'Delete Route',
+      message:
+      'This will permanently remove "${_route.routeName}" from the '
+          'database. This action cannot be undone.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    );
+
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() => _isDeleting = true);
+
+    try {
+      final String message =
+      await RouteService.instance.deleteRoute(_route.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _isDeleting = false);
+
+      await AppDialogs.showSuccess(
+        context,
+        title: 'Route Deleted',
+        message: message,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _isDeleting = false);
+
+      await AppDialogs.showError(
+        context,
+        title: 'Delete Failed',
+        message: e.message,
+      );
+    }
+  }
+
+  void _close() {
+    if (!_isDeleting) {
+      Navigator.of(context).pop(_hasChanges);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -128,6 +194,18 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                   icon: const Icon(CupertinoIcons.pencil),
                   label: 'Edit Route',
                   onTap: _handleEdit,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: GlassButton(
+                  icon: Icon(
+                    _isDeleting
+                        ? CupertinoIcons.arrow_2_circlepath
+                        : CupertinoIcons.trash,
+                  ),
+                  label: _isDeleting ? 'Deleting...' : 'Delete Route',
+                  onTap: _handleDelete,
                 ),
               ),
             ],
